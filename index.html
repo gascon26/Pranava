@@ -322,6 +322,32 @@ input[type=range]::-moz-range-thumb{
 .about .mk{font-family:var(--om);color:var(--text-dim)}
 
 /* ============================================================
+   ANALYZER
+   ============================================================ */
+.an-wrap{display:flex;flex-direction:column;gap:14px}
+.an-canvas-box{
+  position:relative;height:280px;overflow:hidden;
+  background:var(--ground);border:1px solid var(--line-soft);border-radius:18px;
+}
+#anCanvas{width:100%;height:100%;display:block}
+.an-idle{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:12px;text-align:center;padding:24px;color:var(--text-faint);
+}
+.an-idle .om-mark{font-family:var(--om);font-size:40px;color:var(--line)}
+.an-idle p{font-size:13.5px;line-height:1.55;max-width:270px;margin:0}
+.an-readout{
+  display:flex;align-items:baseline;justify-content:space-between;
+  background:var(--ground);border:1px solid var(--line-soft);border-radius:18px;
+  padding:16px 18px;
+}
+.an-hz{font-family:var(--display);font-size:34px;color:var(--gold);line-height:1}
+.an-hz small{font-size:14px;color:var(--text-faint);margin-left:6px;font-family:var(--body)}
+.an-note{font-family:var(--display);font-size:22px;color:var(--text)}
+.an-note .cents{font-size:12px;color:var(--text-faint);font-family:var(--body);margin-left:6px}
+.an-hint{font-size:12.5px;line-height:1.6;color:var(--text-faint);padding:2px 4px;margin:0}
+
+/* ============================================================
    COMPLETION SHEET
    ============================================================ */
 .sheet-backdrop{
@@ -497,6 +523,32 @@ input[type=range]::-moz-range-thumb{
       </div>
     </section>
 
+    <!-- ============ ANALYZER ============ -->
+    <section id="s-analyzer" class="screen">
+      <div class="screen-head">
+        <div class="eyebrow">See your sound</div>
+        <div class="screen-title">Chant analyzer</div>
+      </div>
+      <div class="scroll">
+        <div class="an-wrap">
+          <div class="an-canvas-box">
+            <canvas id="anCanvas"></canvas>
+            <div class="an-idle" id="anIdle">
+              <span class="om-mark">ॐ</span>
+              <p>Chant and watch the harmonic stack of your own Om — the fundamental low, its overtones climbing above it.</p>
+            </div>
+          </div>
+          <div class="an-readout">
+            <div class="an-hz" id="anHz">—<small>Hz</small></div>
+            <div class="an-note" id="anNote">·</div>
+          </div>
+          <button class="btn-primary" id="anToggle" style="max-width:none">Start microphone</button>
+          <div><button class="chip" id="anDrone">Drone: off</button></div>
+          <p class="an-hint">Nothing is recorded — the microphone feeds a live Fourier transform on this device and the samples are discarded. Watch the harmonics move through A · U · M: the open A rings high, the closed M settles onto the fundamental. Dashed lines mark the drone's pitches.</p>
+        </div>
+      </div>
+    </section>
+
   </div>
 
   <!-- ============ TAB BAR ============ -->
@@ -504,6 +556,10 @@ input[type=range]::-moz-range-thumb{
     <button class="tab is-active" data-nav="practice">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>
       <span>Practice</span>
+    </button>
+    <button class="tab" data-nav="analyzer">
+      <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M4 14v-4M8 17V7M12 20V4M16 16V8M20 13v-2"/></svg>
+      <span>Analyzer</span>
     </button>
     <button class="tab" data-nav="history">
       <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
@@ -920,11 +976,174 @@ function wireSettings(){
 }
 
 /* ============================================================
+   ANALYZER — live spectrum of the chant. Mic → AnalyserNode
+   (FFT) → canvas. Audio never leaves this device: the stream
+   feeds the transform in memory and samples are discarded.
+   Nothing is recorded or sent anywhere.
+   ============================================================ */
+const Analyzer = (()=>{
+  const FMIN=60, FMAX=4000, DB_MIN=-100, DB_MAX=-25;
+  const NOTES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+  const DRONE_F=[68.05,136.1,204.15];
+  let stream=null, src=null, analyser=null, raf=0, running=false, droneOn=false;
+  let bins=null, smHz=0;
+  const canvas=$('#anCanvas');
+  const cx = canvas.getContext ? canvas.getContext('2d') : null;
+
+  function fitCanvas(){
+    const r=canvas.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+    canvas.width=Math.max(300,(r.width||300)*dpr);
+    canvas.height=Math.max(200,(r.height||280)*dpr);
+  }
+  window.addEventListener('resize',()=>{ if(running) fitCanvas(); });
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') deactivate(); });
+
+  async function toggle(){ if(running) stopMic(); else await start(); }
+
+  async function start(){
+    try{
+      const ctx=Sound.ensure();
+      // Disable phone-call processing: noise suppression is built to
+      // remove steady tonal hums — i.e. exactly an Om plus a drone.
+      stream=await navigator.mediaDevices.getUserMedia({
+        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+      });
+      src=ctx.createMediaStreamSource(stream);
+      analyser=ctx.createAnalyser();
+      analyser.fftSize=8192;                 // ~5.9 Hz/bin at 48 kHz
+      analyser.smoothingTimeConstant=0.55;
+      src.connect(analyser);                 // dead end — never to speakers
+      bins=new Float32Array(analyser.frequencyBinCount);
+      running=true; smHz=0;
+      $('#anIdle').classList.add('hidden');
+      $('#anToggle').textContent='Stop microphone';
+      fitCanvas();
+      raf=requestAnimationFrame(frame);
+    }catch(err){ showErr(err); }
+  }
+
+  function stopMic(){
+    running=false; cancelAnimationFrame(raf);
+    try{ src&&src.disconnect(); }catch(e){}
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }  // releases mic (green dot off)
+    src=null; analyser=null;
+    $('#anToggle').textContent='Start microphone';
+    $('#anIdle').classList.remove('hidden');
+    $('#anHz').innerHTML='—<small>Hz</small>'; $('#anNote').textContent='·';
+  }
+
+  function toggleDrone(){
+    droneOn=!droneOn;
+    if(droneOn) Sound.startDrone(settings.droneVol); else Sound.stopDrone(false);
+    $('#anDrone').textContent='Drone: '+(droneOn?'on':'off');
+  }
+
+  // Leaving the tab or hiding the app shuts the mic and the analyzer's drone.
+  function deactivate(){
+    if(running) stopMic();
+    if(droneOn) toggleDrone();
+  }
+
+  function showErr(err){
+    const blocked = err && (err.name==='NotAllowedError'||err.name==='SecurityError');
+    $('#anIdle').classList.remove('hidden');
+    $('#anIdle').innerHTML='<span class="om-mark">ॐ</span><p>'+(blocked
+      ? 'Microphone access is blocked. Allow it in Chrome\'s site settings — or, for the installed app, Android Settings → Apps → Pranava → Permissions — then try again.'
+      : 'Couldn\'t open the microphone ('+((err&&err.name)||'unknown')+'). Close other apps using it and try again.')+'</p>';
+  }
+
+  function frame(){
+    if(!running) return;
+    analyser.getFloatFrequencyData(bins);
+    readout(detectF0());
+    draw();
+    raf=requestAnimationFrame(frame);
+  }
+
+  // Display-grade pitch: strongest bin in the vocal range, refined with
+  // parabolic interpolation across the neighboring bins for sub-bin accuracy.
+  function detectF0(){
+    const bw=Sound.ensure().sampleRate/analyser.fftSize;
+    const lo=Math.max(1,Math.floor(60/bw)), hi=Math.min(bins.length-2,Math.ceil(350/bw));
+    let k=-1,best=-Infinity;
+    for(let i=lo;i<=hi;i++) if(bins[i]>best){best=bins[i];k=i;}
+    if(k<1||best<-70) return 0;
+    const a=bins[k-1],b=bins[k],c=bins[k+1],den=a-2*b+c;
+    const p=den?0.5*(a-c)/den:0;
+    return (k+clamp(p,-0.5,0.5))*bw;
+  }
+
+  function readout(f0){
+    if(!f0){
+      if(smHz){ smHz=0; $('#anHz').innerHTML='—<small>Hz</small>'; $('#anNote').textContent='·'; }
+      return;
+    }
+    smHz = smHz ? smHz*0.7+f0*0.3 : f0;   // light smoothing against jitter
+    const midi=69+12*Math.log2(smHz/440);
+    const n=Math.round(midi), cents=Math.round((midi-n)*100);
+    const name=NOTES[((n%12)+12)%12]+(Math.floor(n/12)-1);
+    $('#anHz').innerHTML=smHz.toFixed(1)+'<small>Hz</small>';
+    $('#anNote').innerHTML=name+'<span class="cents">'+(cents>=0?'+':'')+cents+'¢</span>';
+  }
+
+  function draw(){
+    if(!cx) return;
+    const W=canvas.width, H=canvas.height, dpr=window.devicePixelRatio||1;
+    const bw=Sound.ensure().sampleRate/analyser.fftSize;
+    const f2x=f=>W*Math.log(f/FMIN)/Math.log(FMAX/FMIN);
+    const x2f=x=>FMIN*Math.pow(FMAX/FMIN,x/W);
+    const db2y=db=>H*(1-(clamp(db,DB_MIN,DB_MAX)-DB_MIN)/(DB_MAX-DB_MIN));
+    cx.clearRect(0,0,W,H);
+
+    // frequency grid
+    cx.lineWidth=1; cx.strokeStyle='rgba(242,234,217,.07)';
+    cx.fillStyle='rgba(172,157,135,.55)'; cx.font=(10*dpr)+'px Karla, sans-serif';
+    [100,200,500,1000,2000].forEach(f=>{
+      const x=f2x(f);
+      cx.beginPath(); cx.moveTo(x,0); cx.lineTo(x,H); cx.stroke();
+      cx.fillText(f>=1000?(f/1000)+'k':''+f, x+4*dpr, H-6*dpr);
+    });
+
+    // drone pitch markers
+    if(droneOn){
+      cx.strokeStyle='rgba(224,138,69,.45)'; cx.setLineDash([4*dpr,5*dpr]);
+      DRONE_F.forEach(f=>{const x=f2x(f); cx.beginPath(); cx.moveTo(x,0); cx.lineTo(x,H); cx.stroke();});
+      cx.setLineDash([]);
+    }
+
+    // spectrum: per pixel-column, take the loudest bin it covers
+    const pts=[], step=Math.max(1,Math.floor(W/480));
+    for(let x=0;x<=W;x+=step){
+      const i0=Math.max(1,Math.floor(x2f(x)/bw));
+      const i1=Math.min(bins.length-1,Math.max(i0,Math.ceil(x2f(Math.min(W,x+step))/bw)));
+      let m=-Infinity; for(let i=i0;i<=i1;i++) if(bins[i]>m)m=bins[i];
+      pts.push([x,db2y(m)]);
+    }
+    cx.beginPath(); pts.forEach(([x,y],i)=> i?cx.lineTo(x,y):cx.moveTo(x,y));
+    cx.strokeStyle='rgba(231,184,92,.95)'; cx.lineWidth=Math.max(1,dpr); cx.stroke();
+    cx.lineTo(W,H); cx.lineTo(pts[0][0],H); cx.closePath();
+    const g=cx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'rgba(244,212,140,.5)'); g.addColorStop(.6,'rgba(199,123,55,.25)'); g.addColorStop(1,'rgba(199,123,55,.04)');
+    cx.fillStyle=g; cx.fill();
+
+    // fundamental marker
+    if(smHz>FMIN){
+      const x=f2x(smHz);
+      cx.strokeStyle='rgba(244,212,140,.85)'; cx.lineWidth=Math.max(1,dpr);
+      cx.beginPath(); cx.moveTo(x,0); cx.lineTo(x,H); cx.stroke();
+    }
+  }
+
+  return {toggle,toggleDrone,deactivate};
+})();
+
+/* ============================================================
    NAV + TOAST + WIRING
    ============================================================ */
 function nav(name){
   $$('.screen').forEach(s=>s.classList.toggle('is-active', s.id==='s-'+name));
   $$('.tab').forEach(t=>t.classList.toggle('is-active', t.dataset.nav===name));
+  if(name!=='analyzer') Analyzer.deactivate();
   if(name==='history') renderHistory();
   if(name==='practice' && !E.running) practiceScreen.className='screen is-active';
 }
@@ -941,6 +1160,8 @@ function wire(){
   $('#endBtn').onclick=endSession; $('#endBtn2').onclick=endSession;
   $('#saveBtn').onclick=saveCompletion; $('#discardBtn').onclick=discardCompletion;
   $('#expJson').onclick=exportJson; $('#expCsv').onclick=exportCsv;
+  $('#anToggle').onclick=()=>Analyzer.toggle();
+  $('#anDrone').onclick=()=>Analyzer.toggleDrone();
   wireSettings();
 }
 
