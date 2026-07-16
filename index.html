@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#17120E">
+<title>Pranava — Om practice</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" href="./favicon.png" type="image/png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pranava">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Karla:wght@300;400;500;600;700&family=Noto+Serif+Devanagari:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   PRANAVA — design tokens
+   Palette grounded in the subject: warm temple dark, gold leaf,
+   butter-lamp amber, saffron. Not a generic neon-on-black theme.
+   ============================================================ */
+:root{
+  --void:#17120E;        /* deepest ground (warm espresso-black) */
+  --ground:#221A14;      /* card surface */
+  --ground-2:#2C231B;    /* elevated / inputs */
+  --line:#3A2F24;        /* hairlines */
+  --line-soft:rgba(242,234,217,.07);
+
+  --gold:#E7B85C;        /* primary — lamp-lit brass */
+  --gold-bright:#F4D48C; /* highlight */
+  --amber:#C77B37;       /* ember / the chant phase */
+  --saffron:#E08A45;     /* warm secondary */
+
+  --text:#F2EAD9;        /* warm parchment */
+  --text-dim:#AC9D87;    /* muted */
+  --text-faint:#726551;  /* faint */
+
+  --display:'Marcellus', Georgia, serif;
+  --body:'Karla', system-ui, sans-serif;
+  --om:'Noto Serif Devanagari','Marcellus',serif;
+
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--body);
+  background:var(--void);
+  color:var(--text);
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+  overscroll-behavior:none;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;
+}
+button{font-family:inherit;color:inherit;cursor:pointer;border:none;background:none}
+input,textarea{font-family:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
+
+/* ============================================================
+   APP SHELL
+   ============================================================ */
+#app{
+  position:fixed;inset:0;
+  display:flex;flex-direction:column;
+  max-width:520px;margin:0 auto;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(199,123,55,.10), transparent 60%),
+    radial-gradient(90% 60% at 50% 115%, rgba(231,184,92,.06), transparent 55%),
+    var(--void);
+}
+.screens{flex:1;position:relative;overflow:hidden}
+.screen{
+  position:absolute;inset:0;
+  display:none;flex-direction:column;
+  padding-top:env(safe-area-inset-top);
+  opacity:0;
+}
+.screen.is-active{display:flex;opacity:1;animation:fade .35s var(--ease)}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+
+.scroll{flex:1;overflow-y:auto;padding:8px 20px 28px}
+.scroll::-webkit-scrollbar{width:0}
+
+.eyebrow{
+  font-family:var(--body);font-weight:600;
+  font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--text-faint);
+}
+.screen-title{font-family:var(--display);font-size:30px;font-weight:400;letter-spacing:.01em;margin-top:2px}
+.screen-head{padding:26px 20px 12px}
+
+/* ============================================================
+   TAB BAR
+   ============================================================ */
+.tabbar{
+  display:flex;
+  padding:6px 12px calc(6px + env(safe-area-inset-bottom));
+  background:linear-gradient(180deg, rgba(23,18,14,0), var(--void) 45%);
+  border-top:1px solid var(--line-soft);
+}
+.tab{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:9px 0 6px;color:var(--text-faint);
+  transition:color .25s var(--ease);
+}
+.tab svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.6;fill:none}
+.tab span{font-size:10.5px;letter-spacing:.06em;font-weight:600}
+.tab.is-active{color:var(--gold)}
+.tab.is-active svg{filter:drop-shadow(0 0 6px rgba(231,184,92,.5))}
+
+/* ============================================================
+   PRACTICE SCREEN
+   ============================================================ */
+#s-practice{align-items:center;justify-content:space-between;padding:0}
+.practice-top{
+  width:100%;text-align:center;
+  padding:calc(24px + env(safe-area-inset-top)) 20px 0;
+}
+.wordmark{font-family:var(--display);font-size:22px;letter-spacing:.16em;color:var(--text)}
+.wordmark .mark{font-family:var(--om);color:var(--gold);margin-right:.12em}
+.subword{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--text-faint);margin-top:5px}
+
+/* Orb — the signature: a golden egg / lamp flame that breathes */
+.stage{
+  flex:1;width:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:0;position:relative;
+}
+.phase-word{
+  font-family:var(--display);font-size:24px;font-weight:400;
+  letter-spacing:.02em;color:var(--text-dim);
+  height:30px;margin-bottom:26px;
+  transition:color .5s var(--ease);
+}
+.orb-wrap{
+  position:relative;width:236px;height:236px;
+  display:flex;align-items:center;justify-content:center;
+}
+.orb-glow{
+  position:absolute;width:236px;height:236px;border-radius:50%;
+  background:radial-gradient(circle at 50% 45%, rgba(244,212,140,.85), rgba(199,123,55,.35) 45%, transparent 72%);
+  filter:blur(26px);opacity:.16;
+  transform:scale(.9);will-change:transform,opacity;
+}
+.orb{
+  position:relative;width:172px;height:172px;border-radius:50%;
+  background:
+    radial-gradient(circle at 42% 36%, var(--gold-bright), var(--gold) 38%, var(--amber) 88%);
+  box-shadow:
+    inset 0 3px 14px rgba(255,240,205,.55),
+    inset 0 -14px 30px rgba(120,58,18,.55),
+    0 12px 40px rgba(199,123,55,.28);
+  display:flex;align-items:center;justify-content:center;
+  will-change:transform;
+}
+.orb .om{
+  font-family:var(--om);font-size:74px;line-height:1;
+  color:#3a2210;text-shadow:0 1px 1px rgba(255,240,205,.4);
+  opacity:.9;margin-top:6px;
+}
+.orb-wrap.idle-breathe .orb{animation:breathe 7s ease-in-out infinite}
+.orb-wrap.idle-breathe .orb-glow{animation:breatheGlow 7s ease-in-out infinite}
+@keyframes breathe{0%,100%{transform:scale(.9)}50%{transform:scale(1)}}
+@keyframes breatheGlow{0%,100%{transform:scale(.85);opacity:.12}50%{transform:scale(1);opacity:.28}}
+
+.round-line{height:18px;margin-top:26px;font-size:13px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-faint);font-weight:600}
+.dots{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;justify-content:center;max-width:280px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--line);transition:all .35s var(--ease)}
+.dot.done{background:var(--gold);box-shadow:0 0 8px rgba(231,184,92,.55)}
+.dot.current{background:var(--gold-bright);transform:scale(1.5);box-shadow:0 0 10px rgba(244,212,140,.8)}
+
+/* phase color moods */
+#s-practice.mood-inhale .phase-word{color:var(--gold-bright)}
+#s-practice.mood-chant .phase-word{color:var(--saffron)}
+#s-practice.mood-rest .phase-word{color:var(--text-dim)}
+
+/* Controls */
+.controls{
+  width:100%;padding:0 24px calc(22px + env(safe-area-inset-bottom));
+  display:flex;flex-direction:column;align-items:center;gap:14px;
+}
+.hint{font-size:13px;color:var(--text-faint);letter-spacing:.02em;height:16px}
+.btn-primary{
+  width:100%;max-width:300px;padding:17px;border-radius:100px;
+  font-family:var(--display);font-size:17px;letter-spacing:.06em;color:#2a1a0c;
+  background:linear-gradient(180deg, var(--gold-bright), var(--gold));
+  box-shadow:0 8px 24px rgba(231,184,92,.28), inset 0 1px 0 rgba(255,255,255,.4);
+  transition:transform .12s var(--ease),box-shadow .2s var(--ease);
+}
+.btn-primary:active{transform:scale(.97)}
+.btn-row{display:flex;gap:12px;width:100%;max-width:300px}
+.btn-ghost{
+  flex:1;padding:15px;border-radius:100px;font-weight:600;font-size:15px;letter-spacing:.04em;
+  color:var(--text);background:var(--ground-2);border:1px solid var(--line);
+  transition:transform .12s var(--ease),background .2s var(--ease);
+}
+.btn-ghost:active{transform:scale(.97)}
+.btn-ghost.danger{color:#e5a58a}
+
+.hidden{display:none !important}
+
+/* ============================================================
+   STAT CARDS (History)
+   ============================================================ */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+.stat{
+  background:var(--ground);border:1px solid var(--line-soft);border-radius:18px;
+  padding:18px 16px;
+}
+.stat.hero{
+  grid-column:1/-1;
+  background:linear-gradient(140deg, rgba(199,123,55,.14), rgba(34,26,20,.6));
+  border:1px solid rgba(231,184,92,.28);
+  display:flex;align-items:baseline;justify-content:space-between;
+}
+.stat .num{font-family:var(--display);font-size:34px;line-height:1;color:var(--text)}
+.stat.hero .num{font-size:52px;color:var(--gold)}
+.stat .lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-faint);margin-top:8px}
+.stat.hero .lbl{margin-top:0;text-align:right;max-width:120px}
+.stat .flame{font-family:var(--om);font-size:30px;color:var(--saffron);margin-left:4px}
+
+.section-label{
+  font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--text-faint);
+  font-weight:600;margin:26px 2px 10px;display:flex;justify-content:space-between;align-items:center;
+}
+.export-row{display:flex;gap:8px}
+.chip{
+  font-size:11px;letter-spacing:.06em;font-weight:600;padding:7px 12px;border-radius:100px;
+  background:var(--ground-2);border:1px solid var(--line);color:var(--text-dim);
+  transition:background .2s,color .2s;
+}
+.chip:active{background:var(--ground);color:var(--text)}
+
+.log{display:flex;flex-direction:column;gap:9px}
+.entry{
+  background:var(--ground);border:1px solid var(--line-soft);border-radius:14px;
+  padding:14px 16px;display:flex;flex-direction:column;gap:6px;
+}
+.entry-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.entry-date{font-size:14px;color:var(--text);font-weight:500}
+.entry-meta{font-size:12.5px;color:var(--gold);letter-spacing:.03em;white-space:nowrap}
+.entry-note{font-size:13px;color:var(--text-dim);line-height:1.45;font-style:italic}
+
+.empty{
+  text-align:center;padding:54px 24px;color:var(--text-faint);
+}
+.empty .em-mark{font-family:var(--om);font-size:48px;color:var(--line);display:block;margin-bottom:16px}
+.empty p{font-size:14px;line-height:1.5;max-width:240px;margin:0 auto}
+
+/* ============================================================
+   SETTINGS
+   ============================================================ */
+.set-group{
+  background:var(--ground);border:1px solid var(--line-soft);border-radius:18px;
+  padding:4px 18px;margin-bottom:14px;
+}
+.set-row{
+  padding:16px 0;border-bottom:1px solid var(--line-soft);
+  display:flex;flex-direction:column;gap:12px;
+}
+.set-row:last-child{border-bottom:none}
+.set-row.inline{flex-direction:row;align-items:center;justify-content:space-between}
+.set-label{font-size:15px;color:var(--text);font-weight:500}
+.set-sub{font-size:12px;color:var(--text-faint);margin-top:2px}
+.set-val{font-family:var(--display);font-size:18px;color:var(--gold);min-width:56px;text-align:right}
+.row-head{display:flex;justify-content:space-between;align-items:baseline}
+
+/* stepper */
+.stepper{display:flex;align-items:center;gap:14px}
+.step-btn{
+  width:38px;height:38px;border-radius:50%;background:var(--ground-2);border:1px solid var(--line);
+  font-size:20px;color:var(--text);display:flex;align-items:center;justify-content:center;line-height:1;
+}
+.step-btn:active{background:var(--ground)}
+.step-val{font-family:var(--display);font-size:22px;color:var(--gold);min-width:34px;text-align:center}
+
+/* range */
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:2px;
+  background:var(--line);outline:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:22px;height:22px;border-radius:50%;
+  background:linear-gradient(180deg,var(--gold-bright),var(--gold));
+  box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:pointer;
+}
+input[type=range]::-moz-range-thumb{
+  width:22px;height:22px;border:none;border-radius:50%;
+  background:var(--gold);box-shadow:0 2px 8px rgba(0,0,0,.4);
+}
+
+/* switch */
+.switch{
+  width:50px;height:30px;border-radius:100px;background:var(--ground-2);
+  border:1px solid var(--line);position:relative;transition:background .25s var(--ease);
+  flex-shrink:0;
+}
+.switch::after{
+  content:'';position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;
+  background:var(--text-faint);transition:transform .25s var(--ease),background .25s var(--ease);
+}
+.switch[aria-checked=true]{background:rgba(231,184,92,.25);border-color:var(--gold)}
+.switch[aria-checked=true]::after{transform:translateX(20px);background:var(--gold)}
+
+.preview-btn{
+  font-size:13px;font-weight:600;letter-spacing:.03em;color:var(--gold);
+  padding:9px 16px;border-radius:100px;border:1px solid rgba(231,184,92,.35);
+  background:rgba(231,184,92,.06);align-self:flex-start;
+}
+.reset-btn{
+  width:100%;padding:15px;border-radius:100px;color:var(--text-faint);
+  font-size:14px;letter-spacing:.03em;border:1px solid var(--line-soft);margin-top:4px;
+}
+.about{
+  font-size:12.5px;line-height:1.6;color:var(--text-faint);
+  padding:18px 4px 8px;text-align:center;
+}
+.about .mk{font-family:var(--om);color:var(--text-dim)}
+
+/* ============================================================
+   COMPLETION SHEET
+   ============================================================ */
+.sheet-backdrop{
+  position:fixed;inset:0;background:rgba(10,7,5,.72);
+  display:flex;align-items:flex-end;justify-content:center;z-index:40;
+  animation:fade .3s var(--ease);
+}
+.sheet{
+  width:100%;max-width:520px;background:var(--ground);
+  border-radius:26px 26px 0 0;border-top:1px solid var(--line);
+  padding:14px 24px calc(26px + env(safe-area-inset-bottom));
+  animation:slideUp .38s var(--ease);
+}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:2px auto 20px}
+.sheet-mark{font-family:var(--om);font-size:42px;color:var(--gold);text-align:center;display:block;
+  filter:drop-shadow(0 0 14px rgba(231,184,92,.4))}
+.sheet-title{font-family:var(--display);font-size:24px;text-align:center;margin-top:6px}
+.sheet-sum{text-align:center;color:var(--gold);font-size:14px;letter-spacing:.06em;margin-top:6px;font-weight:600}
+.note-label{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);
+  font-weight:600;margin:22px 0 8px}
+#note-input{
+  width:100%;background:var(--ground-2);border:1px solid var(--line);border-radius:14px;
+  padding:13px 14px;color:var(--text);font-size:15px;resize:none;line-height:1.5;
+  user-select:text;
+}
+#note-input::placeholder{color:var(--text-faint)}
+.sheet-actions{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+.toast{
+  position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));
+  transform:translate(-50%,20px);
+  background:var(--ground-2);border:1px solid var(--line);
+  color:var(--text);padding:12px 22px;border-radius:100px;font-size:14px;font-weight:500;
+  opacity:0;pointer-events:none;transition:all .3s var(--ease);z-index:50;
+  box-shadow:0 8px 30px rgba(0,0,0,.4);
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media (prefers-reduced-motion:reduce){
+  .orb-wrap.idle-breathe .orb,.orb-wrap.idle-breathe .orb-glow{animation:none}
+  .screen.is-active{animation:none}
+  *{transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="screens">
+
+    <!-- ============ PRACTICE ============ -->
+    <section id="s-practice" class="screen is-active">
+      <div class="practice-top">
+        <div class="wordmark"><span class="mark">ॐ</span>Pranava</div>
+        <div class="subword">Om practice</div>
+      </div>
+
+      <div class="stage">
+        <div class="phase-word" id="phaseWord">Find a comfortable seat</div>
+        <div class="orb-wrap idle-breathe" id="orbWrap">
+          <div class="orb-glow" id="orbGlow"></div>
+          <div class="orb"><span class="om">ॐ</span></div>
+        </div>
+        <div class="round-line" id="roundLine"></div>
+        <div class="dots" id="dots"></div>
+      </div>
+
+      <div class="controls">
+        <div class="hint" id="hint">Settings ready · 9 rounds</div>
+        <button class="btn-primary" id="beginBtn">Begin</button>
+        <div class="btn-row hidden" id="runBtns">
+          <button class="btn-ghost" id="pauseBtn">Pause</button>
+          <button class="btn-ghost danger" id="endBtn">End</button>
+        </div>
+        <div class="btn-row hidden" id="pauseBtns">
+          <button class="btn-ghost" id="resumeBtn">Resume</button>
+          <button class="btn-ghost danger" id="endBtn2">End</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HISTORY ============ -->
+    <section id="s-history" class="screen">
+      <div class="screen-head">
+        <div class="eyebrow">Your journey</div>
+        <div class="screen-title">Practice log</div>
+      </div>
+      <div class="scroll">
+        <div class="stat-grid">
+          <div class="stat hero">
+            <div class="num" id="stCurrent">0<span class="flame">ॐ</span></div>
+            <div class="lbl">Day streak</div>
+          </div>
+          <div class="stat"><div class="num" id="stTotal">0</div><div class="lbl">Sessions</div></div>
+          <div class="stat"><div class="num" id="stTime">0m</div><div class="lbl">Total time</div></div>
+          <div class="stat"><div class="num" id="stRounds">0</div><div class="lbl">Total rounds</div></div>
+          <div class="stat"><div class="num" id="stLongest">0</div><div class="lbl">Longest streak</div></div>
+        </div>
+
+        <div class="section-label">
+          <span>Sessions</span>
+          <span class="export-row">
+            <button class="chip" id="expJson">JSON</button>
+            <button class="chip" id="expCsv">CSV</button>
+          </span>
+        </div>
+        <div class="log" id="log"></div>
+      </div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section id="s-settings" class="screen">
+      <div class="screen-head">
+        <div class="eyebrow">Tune the practice</div>
+        <div class="screen-title">Settings</div>
+      </div>
+      <div class="scroll">
+        <div class="set-group">
+          <div class="set-row inline">
+            <div><div class="set-label">Rounds</div><div class="set-sub">Breaths of Om per session</div></div>
+            <div class="stepper">
+              <button class="step-btn" data-step="rounds" data-d="-1">–</button>
+              <span class="step-val" id="vRounds">9</span>
+              <button class="step-btn" data-step="rounds" data-d="1">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="set-group">
+          <div class="set-row">
+            <div class="row-head"><span class="set-label">Inhale</span><span class="set-val" id="vInhale">4s</span></div>
+            <input type="range" id="rInhale" min="2" max="8" step="1" value="4">
+          </div>
+          <div class="set-row">
+            <div class="row-head"><span class="set-label">Chant Om</span><span class="set-val" id="vChant">10s</span></div>
+            <input type="range" id="rChant" min="4" max="20" step="1" value="10">
+          </div>
+          <div class="set-row">
+            <div class="row-head"><span class="set-label">Rest between</span><span class="set-val" id="vRest">1s</span></div>
+            <input type="range" id="rRest" min="0" max="5" step="1" value="1">
+          </div>
+        </div>
+
+        <div class="set-group">
+          <div class="set-row">
+            <div class="set-row inline" style="padding:0;border:none">
+              <div><div class="set-label">Drone</div><div class="set-sub">A steady pitch to chant against</div></div>
+              <button class="switch" id="swDrone" role="switch" aria-checked="true"></button>
+            </div>
+            <div id="droneVolRow">
+              <input type="range" id="rDroneVol" min="0" max="100" step="5" value="50">
+              <button class="preview-btn" id="previewDrone">Preview sound</button>
+            </div>
+          </div>
+          <div class="set-row inline">
+            <div><div class="set-label">Chime</div><div class="set-sub">Marks each breath and the close</div></div>
+            <button class="switch" id="swChime" role="switch" aria-checked="true"></button>
+          </div>
+          <div class="set-row inline">
+            <div><div class="set-label">Haptics</div><div class="set-sub">A gentle pulse on each breath</div></div>
+            <button class="switch" id="swHaptics" role="switch" aria-checked="true"></button>
+          </div>
+        </div>
+
+        <button class="reset-btn" id="resetBtn">Reset to defaults</button>
+        <p class="about">
+          <span class="mk">A · U · M</span> — waking, dreaming, deep sleep, and the
+          silence beneath them. Sound the Om slowly and let the breath carry it.
+        </p>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ============ TAB BAR ============ -->
+  <nav class="tabbar">
+    <button class="tab is-active" data-nav="practice">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>
+      <span>Practice</span>
+    </button>
+    <button class="tab" data-nav="history">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      <span>History</span>
+    </button>
+    <button class="tab" data-nav="settings">
+      <svg viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 104 0 2 2 0 10-4 0M5 16h14M15 16a2 2 0 104 0 2 2 0 10-4 0"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <!-- ============ COMPLETION SHEET ============ -->
+  <div class="sheet-backdrop hidden" id="sheet">
+    <div class="sheet">
+      <div class="grab"></div>
+      <span class="sheet-mark">ॐ</span>
+      <div class="sheet-title">Session complete</div>
+      <div class="sheet-sum" id="sumLine"></div>
+      <div class="note-label">How did it feel? (optional)</div>
+      <textarea id="note-input" rows="3" placeholder="A word on the practice…"></textarea>
+      <div class="sheet-actions">
+        <button class="btn-primary" id="saveBtn">Save session</button>
+        <button class="btn-ghost" id="discardBtn">Discard</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+"use strict";
+const $  = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* ============================================================
+   STORAGE LAYER — browser localStorage (works on GitHub Pages
+   and any static host). Kept async so the rest of the app is
+   unchanged. Logs live on this device only.
+   ============================================================ */
+const Store = {
+  async get(key, fallback){
+    try{
+      const raw = localStorage.getItem(key);
+      if(raw == null) return fallback;
+      return JSON.parse(raw);
+    }catch(e){ return fallback; }
+  },
+  async set(key, value){
+    try{
+      localStorage.setItem(key, JSON.stringify(value));
+    }catch(e){ console.error('save failed', e); }
+  }
+};
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const DEFAULTS = {rounds:9, inhale:4, chant:10, rest:1, drone:true, droneVol:50, chime:true, haptics:true};
+let settings = {...DEFAULTS};
+let sessions = [];
+
+/* ============================================================
+   AUDIO — synthesized drone (shruti-box style) + bell chime.
+   No audio files, so it works offline once packaged as a PWA.
+   ============================================================ */
+const Sound = (()=>{
+  let ctx=null, drone=null;
+  const BASE = 136.1; // the "Om" pitch (C#3), a nice cultural detail
+  function ensure(){
+    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
+    if(ctx.state==='suspended') ctx.resume();
+    return ctx;
+  }
+  function startDrone(volPct){
+    ensure(); stopDrone(true);
+    const master = ctx.createGain(); master.gain.value = 0;
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1050; lp.Q.value=.4;
+    master.connect(lp).connect(ctx.destination);
+    const partials=[
+      {f:BASE*0.5, g:.16, t:'sine',     d:-3},
+      {f:BASE,     g:.22, t:'sine',     d:0},
+      {f:BASE,     g:.09, t:'triangle', d:5},
+      {f:BASE*1.5, g:.10, t:'sine',     d:2},
+    ];
+    const oscs = partials.map(p=>{
+      const o=ctx.createOscillator(); o.type=p.t; o.frequency.value=p.f; o.detune.value=p.d;
+      const g=ctx.createGain(); g.gain.value=p.g; o.connect(g).connect(master); o.start(); return o;
+    });
+    const target = .5*clamp(volPct/100,0,1);
+    master.gain.linearRampToValueAtTime(target, ctx.currentTime+1.3);
+    drone={master,oscs};
+  }
+  function setDroneVol(volPct){
+    if(!drone) return;
+    const t=.5*clamp(volPct/100,0,1);
+    drone.master.gain.linearRampToValueAtTime(t, ctx.currentTime+.15);
+  }
+  function stopDrone(immediate){
+    if(!drone) return; const d=drone; drone=null;
+    if(immediate){ try{d.oscs.forEach(o=>o.stop());}catch(e){} return; }
+    const now=ctx.currentTime;
+    d.master.gain.cancelScheduledValues(now);
+    d.master.gain.setValueAtTime(d.master.gain.value, now);
+    d.master.gain.linearRampToValueAtTime(0, now+.8);
+    d.oscs.forEach(o=>{try{o.stop(now+.85);}catch(e){}});
+  }
+  function chime(kind){
+    ensure(); const now=ctx.currentTime;
+    const out=ctx.createGain(); out.connect(ctx.destination);
+    const complete = kind==='complete';
+    const partials = complete
+      ? [{f:432,g:1,d:2.6},{f:648,g:.4,d:2.1},{f:864,g:.2,d:1.7}]
+      : [{f:587.33,g:1,d:1.3},{f:880,g:.32,d:1.0},{f:1174,g:.14,d:.8}];
+    const peak = complete? .16 : .09;
+    const tail = complete? 2.8 : 1.5;
+    out.gain.setValueAtTime(.0001, now);
+    out.gain.exponentialRampToValueAtTime(peak, now+.02);
+    out.gain.exponentialRampToValueAtTime(.0001, now+tail);
+    partials.forEach(p=>{
+      const o=ctx.createOscillator(); o.type='sine'; o.frequency.value=p.f;
+      const g=ctx.createGain(); g.gain.value=p.g; o.connect(g).connect(out);
+      o.start(now); o.stop(now+p.d+.1);
+    });
+  }
+  return {ensure,startDrone,stopDrone,setDroneVol,chime};
+})();
+
+function haptic(pattern){
+  if(settings.haptics && navigator.vibrate){ try{navigator.vibrate(pattern);}catch(e){} }
+}
+
+/* screen wake lock — works in the packaged PWA; no-ops if blocked here */
+let wakeLock=null;
+async function acquireWake(){
+  try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+}
+function releaseWake(){ try{ wakeLock&&wakeLock.release(); }catch(e){} wakeLock=null; }
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible' && E.running && !E.paused) acquireWake();
+});
+
+/* ============================================================
+   SESSION ENGINE
+   ============================================================ */
+const MIN=.55, MAX=1.0;
+const easeInOut = p => .5 - .5*Math.cos(Math.PI*clamp(p,0,1));
+const E = {running:false,paused:false,phase:'idle',round:0,roundsDone:0,
+           phaseStart:0,phaseElapsed:0,activeMs:0,lastTs:0,raf:0};
+
+const orbWrap=$('#orbWrap'), orb=$('.orb'), glow=$('#orbGlow');
+const phaseWord=$('#phaseWord'), roundLine=$('#roundLine'), practiceScreen=$('#s-practice');
+
+function phaseDur(ph){return ph==='inhale'?settings.inhale:ph==='chant'?settings.chant:ph==='rest'?settings.rest:0;}
+const PHASE_TEXT={inhale:'Breathe in',chant:'Chant Om',rest:'Rest'};
+
+function begin(){
+  Sound.ensure();
+  Object.assign(E,{running:true,paused:false,phase:'inhale',round:1,roundsDone:0,
+    phaseStart:performance.now(),activeMs:0,lastTs:performance.now()});
+  orbWrap.classList.remove('idle-breathe');
+  if(settings.drone) Sound.startDrone(settings.droneVol);
+  setMood('inhale'); onBreathStart(); acquireWake(); setControls('running');
+  buildDots(); setScale(MIN);
+  E.raf=requestAnimationFrame(loop);
+}
+function onBreathStart(){ if(settings.chime) Sound.chime('round'); haptic(28); }
+
+function loop(ts){
+  if(!E.running||E.paused) return;
+  E.activeMs += ts - E.lastTs; E.lastTs = ts;
+  const t=(ts-E.phaseStart)/1000, dur=phaseDur(E.phase);
+  const p = dur>0 ? t/dur : 1;
+  let scale;
+  if(E.phase==='inhale')      scale = MIN + (MAX-MIN)*easeInOut(p);
+  else if(E.phase==='chant')  scale = MAX - (MAX-MIN)*easeInOut(p);
+  else                        scale = MIN;
+  setScale(scale);
+  phaseWord.textContent = PHASE_TEXT[E.phase]||'';
+  roundLine.textContent = `Round ${E.round} of ${settings.rounds}`;
+  if(p>=1) advance(ts);
+  if(E.running&&!E.paused) E.raf=requestAnimationFrame(loop);
+}
+
+function advance(ts){
+  const ph=E.phase;
+  if(ph==='inhale'){ E.phase='chant'; E.phaseStart=ts; setMood('chant'); }
+  else if(ph==='chant'){
+    E.roundsDone=E.round; updateDots();
+    if(E.round>=settings.rounds){ finish(); return; }
+    if(settings.rest>0){ E.phase='rest'; E.phaseStart=ts; setMood('rest'); }
+    else { E.round++; E.phase='inhale'; E.phaseStart=ts; setMood('inhale'); onBreathStart(); }
+  } else { // rest
+    E.round++; E.phase='inhale'; E.phaseStart=ts; setMood('inhale'); onBreathStart();
+  }
+}
+
+function finish(){
+  Object.assign(E,{running:false,paused:false,phase:'done'});
+  cancelAnimationFrame(E.raf);
+  Sound.stopDrone(false);
+  if(settings.chime) Sound.chime('complete');
+  haptic([70,50,110]); releaseWake();
+  openCompletion(E.roundsDone, Math.round(E.activeMs/1000));
+}
+function pause(){
+  if(!E.running||E.paused) return;
+  E.paused=true; E.phaseElapsed=performance.now()-E.phaseStart;
+  cancelAnimationFrame(E.raf); Sound.stopDrone(false); releaseWake();
+  phaseWord.textContent='Paused'; setControls('paused');
+}
+function resume(){
+  if(!E.running||!E.paused) return;
+  E.paused=false; const now=performance.now();
+  E.phaseStart=now-E.phaseElapsed; E.lastTs=now;
+  if(settings.drone) Sound.startDrone(settings.droneVol);
+  acquireWake(); setControls('running');
+  E.raf=requestAnimationFrame(loop);
+}
+function endSession(){
+  const done=E.roundsDone, dur=Math.round(E.activeMs/1000);
+  Object.assign(E,{running:false,paused:false,phase:'idle'});
+  cancelAnimationFrame(E.raf); Sound.stopDrone(false); releaseWake();
+  if(done>0){ haptic(40); openCompletion(done,dur); }
+  else resetIdle();
+}
+
+/* ---- practice view helpers ---- */
+function setScale(s){
+  orb.style.transform=`scale(${s})`;
+  const g=(s-MIN)/(MAX-MIN);
+  glow.style.transform=`scale(${.85+g*.35})`;
+  glow.style.opacity=(.12+g*.68).toFixed(3);
+}
+function setMood(m){ practiceScreen.className='screen is-active mood-'+m; }
+function setControls(mode){
+  $('#beginBtn').classList.toggle('hidden', mode!=='idle');
+  $('#hint').classList.toggle('hidden', mode!=='idle');
+  $('#runBtns').classList.toggle('hidden', mode!=='running');
+  $('#pauseBtns').classList.toggle('hidden', mode!=='paused');
+}
+function resetIdle(){
+  Object.assign(E,{running:false,paused:false,phase:'idle',round:0,roundsDone:0});
+  practiceScreen.className='screen is-active';
+  orbWrap.classList.add('idle-breathe');
+  orb.style.transform=''; glow.style.transform=''; glow.style.opacity='';
+  phaseWord.textContent='Find a comfortable seat';
+  roundLine.textContent='';
+  setControls('idle'); updateHint(); buildDots();
+}
+function updateHint(){ $('#hint').textContent=`Settings ready · ${settings.rounds} rounds`; }
+
+function buildDots(){
+  const el=$('#dots'); el.innerHTML='';
+  for(let i=0;i<settings.rounds;i++){ const d=document.createElement('div'); d.className='dot'; el.appendChild(d); }
+  updateDots();
+}
+function updateDots(){
+  $$('#dots .dot').forEach((d,i)=>{
+    d.classList.toggle('done', i<E.roundsDone);
+    d.classList.toggle('current', E.running && i===E.roundsDone && E.roundsDone<settings.rounds);
+  });
+}
+
+/* ============================================================
+   COMPLETION
+   ============================================================ */
+let pending=null;
+function fmtDur(sec){
+  const m=Math.floor(sec/60), s=sec%60;
+  if(m&&s) return `${m}m ${s}s`; if(m) return `${m}m`; return `${s}s`;
+}
+function openCompletion(rounds,durSec){
+  pending={rounds,durSec};
+  $('#sumLine').textContent=`${rounds} ${rounds===1?'round':'rounds'} · ${fmtDur(durSec)}`;
+  $('#note-input').value='';
+  $('#sheet').classList.remove('hidden');
+}
+async function saveCompletion(){
+  if(!pending) return;
+  sessions.unshift({
+    id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    ts:Date.now(), rounds:pending.rounds, durationSec:pending.durSec,
+    note:$('#note-input').value.trim()
+  });
+  await Store.set('om_sessions', sessions);
+  pending=null; $('#sheet').classList.add('hidden');
+  resetIdle(); renderHistory(); toast('Session saved');
+}
+function discardCompletion(){ pending=null; $('#sheet').classList.add('hidden'); resetIdle(); }
+
+/* ============================================================
+   HISTORY + STATS
+   ============================================================ */
+function dayKey(ts){ const d=new Date(ts); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
+function computeStreaks(list){
+  if(!list.length) return {current:0,longest:0};
+  const keys=[...new Set(list.map(s=>dayKey(s.ts)))]
+    .map(k=>{const [y,m,d]=k.split('-').map(Number);return new Date(y,m,d).getTime();})
+    .sort((a,b)=>a-b);
+  const DAY=864e5;
+  let longest=1,run=1;
+  for(let i=1;i<keys.length;i++){
+    const diff=Math.round((keys[i]-keys[i-1])/DAY);
+    run = diff===1 ? run+1 : 1;
+    longest=Math.max(longest,run);
+  }
+  // current streak: count back from today (or yesterday)
+  const set=new Set(keys.map(t=>Math.round(t/DAY)));
+  const today=Math.round(new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate()).getTime()/DAY);
+  let cur=0, cursor=set.has(today)?today:(set.has(today-1)?today-1:null);
+  while(cursor!==null && set.has(cursor)){ cur++; cursor--; }
+  return {current:cur,longest};
+}
+function renderHistory(){
+  const total=sessions.length;
+  const rounds=sessions.reduce((a,s)=>a+s.rounds,0);
+  const secs=sessions.reduce((a,s)=>a+s.durationSec,0);
+  const {current,longest}=computeStreaks(sessions);
+  $('#stCurrent').innerHTML=`${current}<span class="flame">ॐ</span>`;
+  $('#stTotal').textContent=total;
+  $('#stTime').textContent=fmtDur(secs);
+  $('#stRounds').textContent=rounds;
+  $('#stLongest').textContent=longest;
+
+  const log=$('#log');
+  if(!total){
+    log.innerHTML=`<div class="empty"><span class="em-mark">ॐ</span>
+      <p>No sessions yet. Sound your first Om and it will appear here.</p></div>`;
+    return;
+  }
+  log.innerHTML='';
+  sessions.forEach(s=>{
+    const d=new Date(s.ts);
+    const date=d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+    const time=d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+    const el=document.createElement('div'); el.className='entry';
+    el.innerHTML=`<div class="entry-top">
+        <span class="entry-date">${date} · ${time}</span>
+        <span class="entry-meta">${s.rounds} rounds · ${fmtDur(s.durationSec)}</span>
+      </div>${s.note?`<div class="entry-note">"${escapeHtml(s.note)}"</div>`:''}`;
+    log.appendChild(el);
+  });
+}
+function escapeHtml(t){return t.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* export */
+function download(name,text,type){
+  const blob=new Blob([text],{type}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function exportJson(){
+  if(!sessions.length) return toast('Nothing to export yet');
+  download('pranava-log.json', JSON.stringify({app:'Pranava',exportedAt:new Date().toISOString(),sessions},null,2),'application/json');
+}
+function exportCsv(){
+  if(!sessions.length) return toast('Nothing to export yet');
+  const rows=[['date','rounds','duration_seconds','note']];
+  sessions.forEach(s=>rows.push([new Date(s.ts).toISOString(),s.rounds,s.durationSec,`"${(s.note||'').replace(/"/g,'""')}"`]));
+  download('pranava-log.csv', rows.map(r=>r.join(',')).join('\n'),'text/csv');
+}
+
+/* ============================================================
+   SETTINGS UI
+   ============================================================ */
+function syncSettingsUI(){
+  $('#vRounds').textContent=settings.rounds;
+  $('#rInhale').value=settings.inhale; $('#vInhale').textContent=settings.inhale+'s';
+  $('#rChant').value=settings.chant;   $('#vChant').textContent=settings.chant+'s';
+  $('#rRest').value=settings.rest;     $('#vRest').textContent=settings.rest+'s';
+  $('#rDroneVol').value=settings.droneVol;
+  $('#swDrone').setAttribute('aria-checked',settings.drone);
+  $('#swChime').setAttribute('aria-checked',settings.chime);
+  $('#swHaptics').setAttribute('aria-checked',settings.haptics);
+  $('#droneVolRow').style.display=settings.drone?'block':'none';
+}
+async function persistSettings(){ await Store.set('om_settings', settings); }
+
+function wireSettings(){
+  $$('.step-btn').forEach(b=>b.onclick=()=>{
+    const d=+b.dataset.d; settings.rounds=clamp(settings.rounds+d,1,27);
+    $('#vRounds').textContent=settings.rounds; updateHint();
+    if(!E.running) buildDots(); persistSettings();
+  });
+  const bind=(id,key,unit,el)=>{
+    $(id).addEventListener('input',e=>{ settings[key]=+e.target.value; $(el).textContent=settings[key]+unit; });
+    $(id).addEventListener('change',persistSettings);
+  };
+  bind('#rInhale','inhale','s','#vInhale');
+  bind('#rChant','chant','s','#vChant');
+  bind('#rRest','rest','s','#vRest');
+  $('#rDroneVol').addEventListener('input',e=>{ settings.droneVol=+e.target.value; Sound.setDroneVol(settings.droneVol); });
+  $('#rDroneVol').addEventListener('change',persistSettings);
+
+  const toggle=(id,key,after)=>$(id).onclick=()=>{
+    settings[key]=!settings[key]; $(id).setAttribute('aria-checked',settings[key]);
+    persistSettings(); after&&after();
+  };
+  toggle('#swDrone','drone',()=>$('#droneVolRow').style.display=settings.drone?'block':'none');
+  toggle('#swChime','chime');
+  toggle('#swHaptics','haptics');
+
+  let prevTimer=null;
+  $('#previewDrone').onclick=()=>{
+    Sound.ensure(); Sound.startDrone(settings.droneVol);
+    clearTimeout(prevTimer); prevTimer=setTimeout(()=>Sound.stopDrone(false),3200);
+  };
+  $('#resetBtn').onclick=()=>{
+    settings={...DEFAULTS}; syncSettingsUI(); updateHint();
+    if(!E.running) buildDots(); persistSettings(); toast('Reset to defaults');
+  };
+}
+
+/* ============================================================
+   NAV + TOAST + WIRING
+   ============================================================ */
+function nav(name){
+  $$('.screen').forEach(s=>s.classList.toggle('is-active', s.id==='s-'+name));
+  $$('.tab').forEach(t=>t.classList.toggle('is-active', t.dataset.nav===name));
+  if(name==='history') renderHistory();
+  if(name==='practice' && !E.running) practiceScreen.className='screen is-active';
+}
+let toastTimer=null;
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+function wire(){
+  $$('.tab').forEach(t=>t.onclick=()=>nav(t.dataset.nav));
+  $('#beginBtn').onclick=begin;
+  $('#pauseBtn').onclick=pause;  $('#resumeBtn').onclick=resume;
+  $('#endBtn').onclick=endSession; $('#endBtn2').onclick=endSession;
+  $('#saveBtn').onclick=saveCompletion; $('#discardBtn').onclick=discardCompletion;
+  $('#expJson').onclick=exportJson; $('#expCsv').onclick=exportCsv;
+  wireSettings();
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+(async function init(){
+  wire();
+  const savedSettings = await Store.get('om_settings', null);
+  if(savedSettings) settings={...DEFAULTS,...savedSettings};
+  sessions = await Store.get('om_sessions', []);
+  syncSettingsUI(); updateHint(); buildDots(); resetIdle();
+})();
+
+/* register service worker — enables offline use and home-screen install */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
+}
+</script>
+</body>
+</html>
