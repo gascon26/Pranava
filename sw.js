@@ -1,6 +1,6 @@
 /* Pranava service worker — offline support.
    Bump CACHE (v1 -> v2 ...) whenever you redeploy to refresh cached files. */
-const CACHE = 'pranava-v3';
+const CACHE = 'pranava-v4';   // keep in step with the .version line in index.html
 const ASSETS = [
   './',
   './index.html',
