@@ -544,7 +544,7 @@ input[type=range]::-moz-range-thumb{
           </div>
           <button class="btn-primary" id="anToggle" style="max-width:none">Start microphone</button>
           <div><button class="chip" id="anDrone">Drone: off</button></div>
-          <p class="an-hint">Nothing is recorded — the microphone feeds a live Fourier transform on this device and the samples are discarded. Watch the harmonics move through A · U · M: the open A rings high, the closed M settles onto the fundamental. Dashed lines mark the drone's pitches.</p>
+          <p class="an-hint">Nothing is recorded — the microphone feeds a live Fourier transform on this device and the samples are discarded. Watch the harmonics move through A · U · M: the open A rings high, the closed M settles onto the fundamental. Dashed lines mark the drone's pitches, and the note readout is tuned to them — C♯3 +0¢ means you're on the drone.</p>
         </div>
       </div>
     </section>
@@ -985,8 +985,12 @@ const Analyzer = (()=>{
   const FMIN=60, FMAX=4000, DB_MIN=-100, DB_MAX=-25;
   const NOTES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
   const DRONE_F=[68.05,136.1,204.15];
+  // Tuning reference chosen so the 136.1 Hz drone reads exactly C♯3 +0¢
+  // (A440 would show it as −32¢, steering chanters sharp of the drone).
+  const A4=136.1*Math.pow(2,20/12);   // ≈432.1 Hz
   let stream=null, src=null, analyser=null, raf=0, running=false, droneOn=false;
-  let bins=null, smHz=0;
+  let bins=null, disp=null, smHz=0, pending=false;
+  const idleHTML=$('#anIdle').innerHTML;   // pristine idle copy, restored after errors
   const canvas=$('#anCanvas');
   const cx = canvas.getContext ? canvas.getContext('2d') : null;
 
@@ -1001,25 +1005,38 @@ const Analyzer = (()=>{
   async function toggle(){ if(running) stopMic(); else await start(); }
 
   async function start(){
+    if(pending||running) return;
+    pending=true;
     try{
       const ctx=Sound.ensure();
       // Disable phone-call processing: noise suppression is built to
       // remove steady tonal hums — i.e. exactly an Om plus a drone.
-      stream=await navigator.mediaDevices.getUserMedia({
+      const s=await navigator.mediaDevices.getUserMedia({
         audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}
       });
+      // user may have navigated away or hidden the app while the
+      // permission prompt was up — don't turn the mic on under a hidden screen
+      if(!$('#s-analyzer').classList.contains('is-active') || document.visibilityState==='hidden'){
+        s.getTracks().forEach(t=>t.stop());
+        return;
+      }
+      stream=s;
       src=ctx.createMediaStreamSource(stream);
       analyser=ctx.createAnalyser();
       analyser.fftSize=8192;                 // ~5.9 Hz/bin at 48 kHz
-      analyser.smoothingTimeConstant=0.55;
+      analyser.smoothingTimeConstant=0;      // raw frames for pitch; display smoothed separately
       src.connect(analyser);                 // dead end — never to speakers
       bins=new Float32Array(analyser.frequencyBinCount);
+      disp=new Float32Array(analyser.frequencyBinCount).fill(DB_MIN);
       running=true; smHz=0;
+      $('#anIdle').innerHTML=idleHTML;
       $('#anIdle').classList.add('hidden');
       $('#anToggle').textContent='Stop microphone';
       fitCanvas();
+      acquireWake();                         // keep the screen on for hands-free chanting
       raf=requestAnimationFrame(frame);
     }catch(err){ showErr(err); }
+    finally{ pending=false; }
   }
 
   function stopMic(){
@@ -1027,14 +1044,17 @@ const Analyzer = (()=>{
     try{ src&&src.disconnect(); }catch(e){}
     if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }  // releases mic (green dot off)
     src=null; analyser=null;
+    if(!(E.running && !E.paused)) releaseWake();   // the session engine may still need the lock
     $('#anToggle').textContent='Start microphone';
+    $('#anIdle').innerHTML=idleHTML;
     $('#anIdle').classList.remove('hidden');
     $('#anHz').innerHTML='—<small>Hz</small>'; $('#anNote').textContent='·';
   }
 
   function toggleDrone(){
     droneOn=!droneOn;
-    if(droneOn) Sound.startDrone(settings.droneVol); else Sound.stopDrone(false);
+    if(droneOn) Sound.startDrone(settings.droneVol);
+    else if(!E.running) Sound.stopDrone(false);   // never silence a running session's drone
     $('#anDrone').textContent='Drone: '+(droneOn?'on':'off');
   }
 
@@ -1056,6 +1076,8 @@ const Analyzer = (()=>{
     if(!running) return;
     analyser.getFloatFrequencyData(bins);
     readout(detectF0());
+    // display-only smoothing (was analyser.smoothingTimeConstant, which also blurred pitch)
+    for(let i=0;i<bins.length;i++) disp[i]=disp[i]*0.62+Math.max(bins[i],DB_MIN-20)*0.38;
     draw();
     raf=requestAnimationFrame(frame);
   }
@@ -1068,6 +1090,14 @@ const Analyzer = (()=>{
     let k=-1,best=-Infinity;
     for(let i=lo;i<=hi;i++) if(bins[i]>best){best=bins[i];k=i;}
     if(k<1||best<-70) return 0;
+    // Sub-octave check: on the open "A" the 2nd harmonic often out-rings the
+    // fundamental, so if there's comparable energy an octave below, prefer it.
+    const half=Math.round(k/2);
+    if(half>=lo){
+      let hk=half, hb=-Infinity;
+      for(let i=Math.max(lo,half-1);i<=Math.min(hi,half+1);i++) if(bins[i]>hb){hb=bins[i];hk=i;}
+      if(hb>best-10){ k=hk; best=hb; }
+    }
     const a=bins[k-1],b=bins[k],c=bins[k+1],den=a-2*b+c;
     const p=den?0.5*(a-c)/den:0;
     return (k+clamp(p,-0.5,0.5))*bw;
@@ -1079,7 +1109,7 @@ const Analyzer = (()=>{
       return;
     }
     smHz = smHz ? smHz*0.7+f0*0.3 : f0;   // light smoothing against jitter
-    const midi=69+12*Math.log2(smHz/440);
+    const midi=69+12*Math.log2(smHz/A4);
     const n=Math.round(midi), cents=Math.round((midi-n)*100);
     const name=NOTES[((n%12)+12)%12]+(Math.floor(n/12)-1);
     $('#anHz').innerHTML=smHz.toFixed(1)+'<small>Hz</small>';
@@ -1116,7 +1146,7 @@ const Analyzer = (()=>{
     for(let x=0;x<=W;x+=step){
       const i0=Math.max(1,Math.floor(x2f(x)/bw));
       const i1=Math.min(bins.length-1,Math.max(i0,Math.ceil(x2f(Math.min(W,x+step))/bw)));
-      let m=-Infinity; for(let i=i0;i<=i1;i++) if(bins[i]>m)m=bins[i];
+      let m=-Infinity; for(let i=i0;i<=i1;i++) if(disp[i]>m)m=disp[i];
       pts.push([x,db2y(m)]);
     }
     cx.beginPath(); pts.forEach(([x,y],i)=> i?cx.lineTo(x,y):cx.moveTo(x,y));
