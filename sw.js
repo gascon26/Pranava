@@ -1,6 +1,6 @@
 /* Pranava service worker — offline support.
    Bump CACHE (v1 -> v2 ...) whenever you redeploy to refresh cached files. */
-const CACHE = 'pranava-v4';   // keep in step with the .version line in index.html
+const CACHE = 'pranava-v5';   // keep in step with the .version line in index.html
 const ASSETS = [
   './',
   './index.html',
@@ -31,10 +31,12 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
 
   // Page navigations: network-first so a fresh deploy shows up when online,
-  // falling back to the cached app when offline.
+  // falling back to the cached app when offline. cache:'no-cache' revalidates
+  // with the server instead of trusting the HTTP cache's 10-minute max-age,
+  // so a deploy reaches an installed client on its first launch.
   if (req.mode === 'navigate') {
     e.respondWith(
-      fetch(req)
+      fetch(req.url, { cache: 'no-cache' })
         .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return res; })
         .catch(() => caches.match(req).then(hit => hit || caches.match('./index.html')))
     );

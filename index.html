@@ -522,7 +522,7 @@ input[type=range]::-moz-range-thumb{
           silence beneath them. Sound the Om slowly and let the breath carry it.
         </p>
         <!-- keep in step with CACHE in sw.js -->
-        <p class="version">v4</p>
+        <p class="version">v5</p>
       </div>
     </section>
 
@@ -1209,9 +1209,17 @@ function wire(){
   syncSettingsUI(); updateHint(); buildDots(); resetIdle();
 })();
 
-/* register service worker — enables offline use and home-screen install */
+/* register service worker — enables offline use and home-screen install.
+   updateViaCache:'none' + update() on foreground make deploys land fast. */
 if('serviceWorker' in navigator){
-  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
+  window.addEventListener('load', async ()=>{
+    try{
+      const reg=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
+      document.addEventListener('visibilitychange',()=>{
+        if(document.visibilityState==='visible') reg.update().catch(()=>{});
+      });
+    }catch(e){}
+  });
 }
 </script>
 </body>
