@@ -237,6 +237,7 @@ input,textarea{font-family:inherit}
   transition:background .2s,color .2s;
 }
 .chip:active{background:var(--ground);color:var(--text)}
+.chip.danger{color:#e5a58a}
 
 .log{display:flex;flex-direction:column;gap:9px}
 .entry{
@@ -247,6 +248,10 @@ input,textarea{font-family:inherit}
 .entry-date{font-size:14px;color:var(--text);font-weight:500}
 .entry-meta{font-size:12.5px;color:var(--gold);letter-spacing:.03em;white-space:nowrap}
 .entry-note{font-size:13px;color:var(--text-dim);line-height:1.45;font-style:italic}
+.entry-del{
+  align-self:flex-end;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  font-weight:600;color:var(--text-faint);padding:5px 2px 1px;
+}
 
 .empty{
   text-align:center;padding:54px 24px;color:var(--text-faint);
@@ -459,6 +464,7 @@ input[type=range]::-moz-range-thumb{
           <span class="export-row">
             <button class="chip" id="expJson">JSON</button>
             <button class="chip" id="expCsv">CSV</button>
+            <button class="chip danger" id="clearAll">Clear</button>
           </span>
         </div>
         <div class="log" id="log"></div>
@@ -524,8 +530,8 @@ input[type=range]::-moz-range-thumb{
           <span class="mk">A · U · M</span> — waking, dreaming, deep sleep, and the
           silence beneath them. Sound the Om slowly and let the breath carry it.
         </p>
-        <!-- keep in step with CACHE in sw.js -->
-        <p class="version">v6</p>
+        <!-- filled from the active service-worker cache name (sw.js CACHE) -->
+        <p class="version" id="version"></p>
       </div>
     </section>
 
@@ -558,21 +564,21 @@ input[type=range]::-moz-range-thumb{
   </div>
 
   <!-- ============ TAB BAR ============ -->
-  <nav class="tabbar">
-    <button class="tab is-active" data-nav="practice">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>
+  <nav class="tabbar" role="tablist" aria-label="Sections">
+    <button class="tab is-active" data-nav="practice" role="tab" aria-selected="true" aria-label="Practice">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5" fill="currentColor" stroke="none"/></svg>
       <span>Practice</span>
     </button>
-    <button class="tab" data-nav="analyzer">
-      <svg viewBox="0 0 24 24" stroke-linecap="round"><path d="M4 14v-4M8 17V7M12 20V4M16 16V8M20 13v-2"/></svg>
+    <button class="tab" data-nav="analyzer" role="tab" aria-selected="false" aria-label="Chant analyzer">
+      <svg viewBox="0 0 24 24" stroke-linecap="round" aria-hidden="true"><path d="M4 14v-4M8 17V7M12 20V4M16 16V8M20 13v-2"/></svg>
       <span>Analyzer</span>
     </button>
-    <button class="tab" data-nav="history">
-      <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+    <button class="tab" data-nav="history" role="tab" aria-selected="false" aria-label="Practice history">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
       <span>History</span>
     </button>
-    <button class="tab" data-nav="settings">
-      <svg viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 104 0 2 2 0 10-4 0M5 16h14M15 16a2 2 0 104 0 2 2 0 10-4 0"/></svg>
+    <button class="tab" data-nav="settings" role="tab" aria-selected="false" aria-label="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14M5 8a2 2 0 104 0 2 2 0 10-4 0M5 16h14M15 16a2 2 0 104 0 2 2 0 10-4 0"/></svg>
       <span>Settings</span>
     </button>
   </nav>
@@ -915,9 +921,22 @@ function renderHistory(){
     el.innerHTML=`<div class="entry-top">
         <span class="entry-date">${date} · ${time}</span>
         <span class="entry-meta">${s.rounds} rounds · ${fmtDur(s.durationSec)}</span>
-      </div>${s.note?`<div class="entry-note">"${escapeHtml(s.note)}"</div>`:''}`;
+      </div>${s.note?`<div class="entry-note">"${escapeHtml(s.note)}"</div>`:''}
+      <button class="entry-del" aria-label="Delete this session">Delete</button>`;
+    el.querySelector('.entry-del').onclick=ev=>
+      armConfirm(ev.currentTarget,'Confirm?',()=>deleteSession(s.id));
     log.appendChild(el);
   });
+}
+async function deleteSession(id){
+  sessions=sessions.filter(s=>s.id!==id);
+  await Store.set('om_sessions',sessions);
+  renderHistory(); toast('Session deleted');
+}
+async function clearAllSessions(){
+  sessions=[];
+  await Store.set('om_sessions',sessions);
+  renderHistory(); toast('History cleared');
 }
 function escapeHtml(t){return t.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
@@ -1186,7 +1205,11 @@ const Analyzer = (()=>{
    ============================================================ */
 function nav(name){
   $$('.screen').forEach(s=>s.classList.toggle('is-active', s.id==='s-'+name));
-  $$('.tab').forEach(t=>t.classList.toggle('is-active', t.dataset.nav===name));
+  $$('.tab').forEach(t=>{
+    const on=t.dataset.nav===name;
+    t.classList.toggle('is-active', on);
+    t.setAttribute('aria-selected', on);
+  });
   if(name!=='analyzer') Analyzer.deactivate();
   if(name==='history') renderHistory();
   if(name==='practice' && !E.running) practiceScreen.className='screen is-active';
@@ -1221,9 +1244,30 @@ function wire(){
   $('#saveBtn').onclick=saveCompletion;
   $('#discardBtn').onclick=()=>armConfirm($('#discardBtn'),'Tap again to discard',discardCompletion);
   $('#expJson').onclick=exportJson; $('#expCsv').onclick=exportCsv;
+  $('#clearAll').onclick=()=>{
+    if(!sessions.length) return toast('Nothing to clear');
+    armConfirm($('#clearAll'),'Clear all?',clearAllSessions);
+  };
   $('#anToggle').onclick=()=>Analyzer.toggle();
   $('#anDrone').onclick=()=>Analyzer.toggleDrone();
   wireSettings();
+}
+
+/* The build version shown on Settings is derived from the active
+   service-worker cache name (sw.js `CACHE`) — one source of truth, so
+   the two files can't silently drift. Falls back to blank off-PWA. */
+async function showVersion(){
+  const el=$('#version'); if(!el) return;
+  try{
+    if(!('caches' in window)) return;
+    const vs=(await caches.keys())
+      .filter(k=>k.startsWith('pranava-'))
+      .map(k=>k.slice('pranava-'.length));
+    if(!vs.length) return;
+    // during an update two caches briefly coexist — show the newest.
+    vs.sort((a,b)=>(parseInt(b.replace(/\D/g,''))||0)-(parseInt(a.replace(/\D/g,''))||0));
+    el.textContent=vs[0];
+  }catch(e){}
 }
 
 /* ============================================================
@@ -1235,6 +1279,7 @@ function wire(){
   if(savedSettings) settings={...DEFAULTS,...savedSettings};
   sessions = await Store.get('om_sessions', []);
   syncSettingsUI(); updateHint(); buildDots(); resetIdle();
+  showVersion();
 })();
 
 /* register service worker — enables offline use and home-screen install.
@@ -1243,6 +1288,8 @@ if('serviceWorker' in navigator){
   window.addEventListener('load', async ()=>{
     try{
       const reg=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
+      navigator.serviceWorker.ready.then(showVersion);
+      navigator.serviceWorker.addEventListener('controllerchange',showVersion);
       document.addEventListener('visibilitychange',()=>{
         if(document.visibilityState==='visible') reg.update().catch(()=>{});
       });

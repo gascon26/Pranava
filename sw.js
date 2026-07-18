@@ -1,6 +1,6 @@
 /* Pranava service worker — offline support.
    Bump CACHE (v1 -> v2 ...) whenever you redeploy to refresh cached files. */
-const CACHE = 'pranava-v6';   // keep in step with the .version line in index.html
+const CACHE = 'pranava-v7';   // single source of truth for the build version (shown on Settings)
 const ASSETS = [
   './',
   './index.html',
@@ -44,11 +44,13 @@ self.addEventListener('fetch', e => {
   }
 
   // Everything else (icons, Google Fonts, etc.): cache-first, then network.
+  // A cache miss that's also offline just fails as a normal network error —
+  // there's nothing to fall back to for an uncached sub-resource.
   e.respondWith(
     caches.match(req).then(hit => hit || fetch(req).then(res => {
       const copy = res.clone();
       caches.open(CACHE).then(c => { try { c.put(req, copy); } catch (_) {} });
       return res;
-    }).catch(() => hit))
+    }))
   );
 });
