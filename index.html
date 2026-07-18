@@ -201,6 +201,9 @@ input,textarea{font-family:inherit}
 .btn-ghost:active{transform:scale(.97)}
 .btn-ghost.danger{color:#e5a58a}
 
+/* armed state for two-tap confirm on destructive actions */
+.confirming{color:#e5a58a !important;border-color:rgba(229,165,138,.5) !important}
+
 .hidden{display:none !important}
 
 /* ============================================================
@@ -522,7 +525,7 @@ input[type=range]::-moz-range-thumb{
           silence beneath them. Sound the Om slowly and let the breath carry it.
         </p>
         <!-- keep in step with CACHE in sw.js -->
-        <p class="version">v5</p>
+        <p class="version">v6</p>
       </div>
     </section>
 
@@ -703,7 +706,14 @@ async function acquireWake(){
 }
 function releaseWake(){ try{ wakeLock&&wakeLock.release(); }catch(e){} wakeLock=null; }
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible' && E.running && !E.paused) acquireWake();
+  if(document.visibilityState==='hidden'){
+    // Backgrounding freezes the rAF loop but not the WebAudio drone, and the
+    // stalled wall-clock time would otherwise inflate the session's active
+    // total on return. Pause cleanly instead; the user resumes when they're back.
+    if(E.running && !E.paused) pause();
+  } else if(E.running && !E.paused){
+    acquireWake();
+  }
 });
 
 /* ============================================================
@@ -840,6 +850,7 @@ function openCompletion(rounds,durSec){
   pending={rounds,durSec};
   $('#sumLine').textContent=`${rounds} ${rounds===1?'round':'rounds'} · ${fmtDur(durSec)}`;
   $('#note-input').value='';
+  disarm($('#discardBtn'));   // fresh sheet, un-armed
   $('#sheet').classList.remove('hidden');
 }
 async function saveCompletion(){
@@ -972,10 +983,10 @@ function wireSettings(){
     Sound.ensure(); Sound.startDrone(settings.droneVol);
     clearTimeout(prevTimer); prevTimer=setTimeout(()=>Sound.stopDrone(false),3200);
   };
-  $('#resetBtn').onclick=()=>{
+  $('#resetBtn').onclick=()=>armConfirm($('#resetBtn'),'Tap again to reset',()=>{
     settings={...DEFAULTS}; syncSettingsUI(); updateHint();
     if(!E.running) buildDots(); persistSettings(); toast('Reset to defaults');
-  };
+  });
 }
 
 /* ============================================================
@@ -1186,12 +1197,29 @@ function toast(msg){
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
 }
 
+/* Two-tap confirm for destructive actions — first tap arms the button and
+   shows a warning label, second tap (within 3s) commits. Calmer than a modal. */
+const armed=new WeakMap();
+function disarm(btn){
+  const s=armed.get(btn);
+  if(!s) return;
+  clearTimeout(s.timer); btn.textContent=s.label; btn.classList.remove('confirming'); armed.delete(btn);
+}
+function armConfirm(btn,confirmLabel,action){
+  if(armed.has(btn)){ disarm(btn); action(); return; }
+  const label=btn.textContent;
+  btn.textContent=confirmLabel; btn.classList.add('confirming');
+  const timer=setTimeout(()=>disarm(btn),3000);
+  armed.set(btn,{timer,label});
+}
+
 function wire(){
   $$('.tab').forEach(t=>t.onclick=()=>nav(t.dataset.nav));
   $('#beginBtn').onclick=begin;
   $('#pauseBtn').onclick=pause;  $('#resumeBtn').onclick=resume;
   $('#endBtn').onclick=endSession; $('#endBtn2').onclick=endSession;
-  $('#saveBtn').onclick=saveCompletion; $('#discardBtn').onclick=discardCompletion;
+  $('#saveBtn').onclick=saveCompletion;
+  $('#discardBtn').onclick=()=>armConfirm($('#discardBtn'),'Tap again to discard',discardCompletion);
   $('#expJson').onclick=exportJson; $('#expCsv').onclick=exportCsv;
   $('#anToggle').onclick=()=>Analyzer.toggle();
   $('#anDrone').onclick=()=>Analyzer.toggleDrone();
